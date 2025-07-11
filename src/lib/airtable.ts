@@ -51,7 +51,9 @@ const AIRTABLE_API_KEY = 'pat8nQDGNPNyaHVZX.167c235ed86dbc2a243d2e118ce823f76b55
 
 // Helper function to format download count
 function formatDownloadCount(count: number): string {
-  if (count >= 1000000) {
+  if (count === 0) {
+    return '0';
+  } else if (count >= 1000000) {
     return `${(count / 1000000).toFixed(1)}M`;
   } else if (count >= 1000) {
     return `${(count / 1000).toFixed(1)}K`;
@@ -80,8 +82,8 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   // Get the type (take the first one if it's an array)
   const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type[0] : record.fields.Type;
 
-  // Get raw download count or default to 1000
-  const downloadCountRaw = record.fields['Download Count Raw'] || 1000;
+  // Get raw download count or default to 0 (start from zero downloads)
+  const downloadCountRaw = record.fields['Download Count Raw'] || 0;
   
   // Use the formatted download count from Airtable or format the raw count
   const downloadCount = record.fields['Download Count'] || formatDownloadCount(downloadCountRaw);
