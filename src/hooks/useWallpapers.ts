@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchWallpapers, downloadCountStore, type Wallpaper } from '@/lib/airtable';
+import { fetchWallpapers, downloadCountStore, testWritePermissions, type Wallpaper } from '@/lib/airtable';
 
 interface UseWallpapersOptions {
   type?: 'mobile' | 'desktop' | 'profile';
@@ -61,6 +61,13 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
       
       // Initialize download count store with global data
       downloadCountStore.initialize(globalData);
+      
+      // Test write permissions (for debugging)
+      console.log('🔍 Testing Airtable write permissions...');
+      const hasWritePermissions = await testWritePermissions();
+      if (!hasWritePermissions) {
+        console.warn('⚠️ Current API token does not have write permissions. Download counts will not sync to Airtable.');
+      }
       
       // Extract unique tags from global data for consistent tag options
       const tags = extractUniqueTags(globalData);

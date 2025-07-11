@@ -46,8 +46,8 @@ export interface Wallpaper {
 }
 
 // Airtable configuration
-const AIRTABLE_BASE_ID = 'appEiIIDf9PdLxOyZ';
-const AIRTABLE_API_KEY = 'pat8nQDGNPNyaHVZX.167c235ed86dbc2a243d2e118ce823f76b55fb3e7798daf4f0357c643318cabe';
+const AIRTABLE_BASE_ID = import.meta.env.VITE_AIRTABLE_BASE_ID || 'appEiIIDf9PdLxOyZ';
+const AIRTABLE_API_KEY = import.meta.env.VITE_AIRTABLE_API_KEY || 'pat8nQDGNPNyaHVZX.d39ccfa7929fa2c23e8937543c0c73cdd6a8afe123556c8ec57bcbf2617d3162';
 
 // Helper function to format download count
 function formatDownloadCount(count: number): string {
@@ -70,6 +70,10 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
     'Profile': 'profile',
     'PP': 'profile'
   };
+
+  // Debug: Log all available fields in this record
+  console.log('Available fields in record:', Object.keys(record.fields));
+  console.log('Record fields:', record.fields);
 
   // Get the main image URL (use full size if available, otherwise the main URL)
   const imageUrl = record.fields.Image && record.fields.Image.length > 0 
@@ -141,6 +145,8 @@ export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): 
     }
     
     console.log('Fetching from Airtable:', `${url}?${params.toString()}`);
+    console.log('Using API Key:', AIRTABLE_API_KEY.substring(0, 10) + '...');
+    console.log('Using Base ID:', AIRTABLE_BASE_ID);
     
     const response = await fetch(`${url}?${params.toString()}`, {
       headers: {
@@ -149,9 +155,19 @@ export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): 
       }
     });
     
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Airtable API error:', response.status, errorText);
+      console.error('Airtable API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText,
+        requestUrl: `${url}?${params.toString()}`,
+        baseId: AIRTABLE_BASE_ID,
+        apiKeyPrefix: AIRTABLE_API_KEY.substring(0, 10) + '...'
+      });
       throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
     }
     
@@ -175,7 +191,78 @@ export async function updateDownloadCount(wallpaperId: string, currentCount: num
     const newCount = currentCount + 1;
     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers/${wallpaperId}`;
     
+    console.log('Attempting to update Airtable:', { wallpaperId, currentCount, newCount, url });
+    
+    // Only update the Download Count Raw field that we know exists
+    const requestBody = {
+      fields: {
+        'Download Count Raw': newCount
+      }
+    };
+    
+    console.log('Request body:', JSON.stringify(requestBody, null, 2));
+    
     const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Airtable API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText,
+        requestUrl: url,
+        requestBody: requestBody,
+        wallpaperId: wallpaperId
+      });
+      
+      // Try to parse the error for more details
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error('Parsed error:', errorJson);
+      } catch (e) {
+        console.error('Raw error text:', errorText);
+      }
+      
+      return currentCount; // Return original count if update fails
+    }
+    
+    const responseData = await response.json();
+    console.log('Successful Airtable update:', responseData);
+    console.log(`Updated download count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
+    return newCount;
+    
+  } catch (error) {
+    console.error('Error updating download count:', {
+      error: error.message,
+      stack: error.stack,
+      wallpaperId,
+      currentCount
+    });
+    return currentCount; // Return original count if update fails
+  }
+}
+
+// Test function to check API write permissions
+export async function testWritePermissions(): Promise<boolean> {
+  try {
+    // Try to get the first wallpaper and test updating it
+    const wallpapers = await fetchWallpapers();
+    if (wallpapers.length === 0) return false;
+    
+    const testWallpaper = wallpapers[0];
+    console.log('Testing write permissions with wallpaper:', testWallpaper.name);
+    
+    const response = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers/${testWallpaper.id}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
@@ -183,23 +270,29 @@ export async function updateDownloadCount(wallpaperId: string, currentCount: num
       },
       body: JSON.stringify({
         fields: {
-          'Download Count Raw': newCount,
-          'Download Count': formatDownloadCount(newCount)
+          // Don't actually change anything, just test the permission
+          'Download Count Raw': testWallpaper.downloadCountRaw
         }
       })
     });
     
-    if (!response.ok) {
-      console.error('Failed to update download count:', response.status, response.statusText);
-      return currentCount; // Return original count if update fails
+    console.log('Write permission test - Status:', response.status);
+    
+    if (response.status === 403) {
+      console.error('❌ API Token lacks write permissions');
+      return false;
+    } else if (response.status === 200) {
+      console.log('✅ API Token has write permissions');
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error('Write permission test failed:', response.status, errorText);
+      return false;
     }
     
-    console.log(`Updated download count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
-    return newCount;
-    
   } catch (error) {
-    console.error('Error updating download count:', error);
-    return currentCount; // Return original count if update fails
+    console.error('Error testing write permissions:', error);
+    return false;
   }
 }
 
@@ -208,122 +301,57 @@ class DownloadCountStore {
   private counts: Map<string, number> = new Map();
   private listeners: Set<(wallpaperId: string, count: number) => void> = new Set();
   private initialized: Set<string> = new Set();
-  private readonly STORAGE_KEY = 'mahm-download-counts';
 
-  constructor() {
-    // Load persisted counts from localStorage on initialization
-    this.loadFromStorage();
-  }
-
-  // Load counts from localStorage
-  private loadFromStorage() {
-    try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
-      if (stored) {
-        const data = JSON.parse(stored);
-        
-        // Restore counts
-        if (data.counts) {
-          Object.entries(data.counts).forEach(([id, count]) => {
-            this.counts.set(id, count as number);
-          });
-        }
-        
-        // Restore initialized set
-        if (data.initialized) {
-          data.initialized.forEach((id: string) => {
-            this.initialized.add(id);
-          });
-        }
-        
-        console.log('Loaded download counts from localStorage:', data);
-      }
-    } catch (error) {
-      console.error('Failed to load download counts from localStorage:', error);
-    }
-  }
-
-  // Save counts to localStorage
-  private saveToStorage() {
-    try {
-      const data = {
-        counts: Object.fromEntries(this.counts),
-        initialized: Array.from(this.initialized),
-        timestamp: Date.now()
-      };
-      
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
-      console.log('Saved download counts to localStorage');
-    } catch (error) {
-      console.error('Failed to save download counts to localStorage:', error);
-    }
-  }
-
-  // Initialize with data from Airtable - only set counts that don't already exist
+  // Initialize with data from Airtable
   initialize(wallpapers: Wallpaper[]) {
     let hasChanges = false;
     
     wallpapers.forEach(wallpaper => {
-      // Only initialize if we haven't seen this wallpaper before
-      // This prevents overwriting incremented counts on page refresh
-      if (!this.initialized.has(wallpaper.id)) {
-        // If we have a stored count for this wallpaper, use the higher value
-        const storedCount = this.counts.get(wallpaper.id) || 0;
-        const airtableCount = wallpaper.downloadCountRaw;
-        const finalCount = Math.max(storedCount, airtableCount);
-        
-        this.counts.set(wallpaper.id, finalCount);
-        this.initialized.add(wallpaper.id);
-        hasChanges = true;
-        
-        console.log(`Initialized count for ${wallpaper.name}: stored=${storedCount}, airtable=${airtableCount}, using=${finalCount}`);
-      } else {
-        console.log(`Skipping re-initialization for ${wallpaper.name}, current count: ${this.getCount(wallpaper.id)}`);
-      }
+      // Always use the count from Airtable for global consistency
+      this.counts.set(wallpaper.id, wallpaper.downloadCountRaw);
+      this.initialized.add(wallpaper.id);
+      hasChanges = true;
+      
+      console.log(`Initialized count for ${wallpaper.name}: ${wallpaper.downloadCountRaw}`);
     });
     
-    // Save to storage if we made changes
     if (hasChanges) {
-      this.saveToStorage();
+      console.log('DownloadCountStore initialized with Airtable data');
     }
   }
 
-  // Get current count
   getCount(wallpaperId: string): number {
     return this.counts.get(wallpaperId) || 0;
   }
 
-  // Get formatted count
   getFormattedCount(wallpaperId: string): string {
-    const count = this.getCount(wallpaperId);
-    return formatDownloadCount(count);
+    return formatDownloadCount(this.getCount(wallpaperId));
   }
 
-  // Increment count locally and update Airtable
+  // Increment count locally and sync with Airtable
   async incrementCount(wallpaperId: string): Promise<void> {
     const currentCount = this.getCount(wallpaperId);
     const newCount = currentCount + 1;
     
-    console.log(`Incrementing count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
-    
-    // Update locally first for instant feedback
+    // Update local count immediately for responsiveness
     this.counts.set(wallpaperId, newCount);
     this.notifyListeners(wallpaperId, newCount);
     
-    // Save to localStorage immediately
-    this.saveToStorage();
+    console.log(`Incremented download count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
     
-    // Update Airtable in the background
+    // Sync with Airtable in the background
     try {
       const updatedCount = await updateDownloadCount(wallpaperId, currentCount);
-      console.log(`Airtable updated successfully to: ${updatedCount}`);
+      
+      // Update with the actual count from Airtable (in case of conflicts)
+      this.counts.set(wallpaperId, updatedCount);
+      this.notifyListeners(wallpaperId, updatedCount);
+      
     } catch (error) {
-      // If Airtable update fails, revert the local change
-      console.error('Airtable update failed, reverting local change');
+      console.error('Failed to sync with Airtable, rolling back:', error);
+      // Rollback on failure
       this.counts.set(wallpaperId, currentCount);
       this.notifyListeners(wallpaperId, currentCount);
-      this.saveToStorage(); // Save the reverted state
-      console.error('Failed to update download count in Airtable:', error);
     }
   }
 
@@ -337,6 +365,7 @@ class DownloadCountStore {
     };
   }
 
+  // Notify all listeners of count changes
   private notifyListeners(wallpaperId: string, count: number) {
     this.listeners.forEach(callback => {
       try {
@@ -351,16 +380,9 @@ class DownloadCountStore {
   getDebugInfo() {
     return {
       counts: Object.fromEntries(this.counts),
-      initialized: Array.from(this.initialized)
+      initialized: Array.from(this.initialized),
+      listenerCount: this.listeners.size
     };
-  }
-
-  // Clear storage (for debugging)
-  clearStorage() {
-    localStorage.removeItem(this.STORAGE_KEY);
-    this.counts.clear();
-    this.initialized.clear();
-    console.log('Cleared download count storage');
   }
 }
 
