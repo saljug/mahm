@@ -82,11 +82,28 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   // Get the type (take the first one if it's an array)
   const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type[0] : record.fields.Type;
 
-  // Get raw download count or default to 0 (start from zero downloads)
-  const downloadCountRaw = record.fields['Download Count Raw'] || 0;
+  // Get raw download count - if it doesn't exist, try to parse from display string or default to 0
+  let downloadCountRaw = record.fields['Download Count Raw'];
+  
+  if (downloadCountRaw === undefined && record.fields['Download Count']) {
+    // Try to parse from existing display format (e.g., "1.5K" -> 1500)
+    const displayCount = record.fields['Download Count'];
+    if (displayCount.includes('K')) {
+      downloadCountRaw = Math.floor(parseFloat(displayCount.replace('K', '')) * 1000);
+    } else if (displayCount.includes('M')) {
+      downloadCountRaw = Math.floor(parseFloat(displayCount.replace('M', '')) * 1000000);
+    } else {
+      downloadCountRaw = parseInt(displayCount) || 0;
+    }
+  }
+  
+  // Default to 0 if still undefined
+  downloadCountRaw = downloadCountRaw || 0;
   
   // Use the formatted download count from Airtable or format the raw count
   const downloadCount = record.fields['Download Count'] || formatDownloadCount(downloadCountRaw);
+
+  console.log(`Wallpaper ${record.fields.Name}: raw=${downloadCountRaw}, display=${downloadCount}`);
 
   return {
     id: record.id,
