@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchWallpapers, type Wallpaper } from '@/lib/airtable';
+import { fetchWallpapers, downloadCountStore, type Wallpaper } from '@/lib/airtable';
 
 interface UseWallpapersOptions {
   type?: 'mobile' | 'desktop' | 'profile';
@@ -58,6 +58,9 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
       // Also fetch global data (all types) for cross-type filtering and tags
       const globalData = await fetchWallpapers();
       setGlobalWallpapers(globalData);
+      
+      // Initialize download count store with global data
+      downloadCountStore.initialize(globalData);
       
       // Extract unique tags from global data for consistent tag options
       const tags = extractUniqueTags(globalData);

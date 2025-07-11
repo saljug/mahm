@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Icon } from '@iconify/react';
+import { useDownloadCount } from '@/hooks/useDownloadCount';
 
 interface WallpaperCardProps {
   id: string;
@@ -23,18 +24,26 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
   imageUrl, 
   downloadUrl,
   isHot = false, 
-  downloadCount,
+  downloadCount: initialDownloadCount,
   alt = "Wallpaper",
   aspectRatio = "mobile",
   index = 0,
   onTagSelect
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Use the download count hook for real-time updates
+  const { formattedCount, incrementCount, isUpdating } = useDownloadCount(id);
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsLoading(true);
+    
     try {
+      // Increment the download count first
+      await incrementCount();
+      
+      // Then proceed with the actual download
       // Fetch the image as a blob to handle CORS properly
       const response = await fetch(downloadUrl, {
         mode: 'cors',
@@ -112,6 +121,9 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
   // Generate numbered download button ID
   const downloadButtonId = `ICON_DOWNLOAD_${index + 1}`;
 
+  // Show loading state if either download or count update is in progress
+  const showLoading = isLoading || isUpdating;
+
   return (
     <div className="w-full group">
       <motion.article 
@@ -160,14 +172,14 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
         )}
         
         {/* Desktop Download Button - Inside frame, bottom overlay, hover only */}
-        <div className="hidden md:block absolute bottom-1.5 left-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="hidden lg:block absolute bottom-1.5 left-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button
             id={downloadButtonId}
             onClick={handleDownload}
-            disabled={isLoading}
-            className="w-full h-[46px] flex items-center justify-center gap-2 bg-[#171717]/90 hover:bg-[#171717] text-white px-4 rounded-[12px] transition-colors backdrop-blur-sm"
+            disabled={showLoading}
+            className="w-full h-[46px] flex items-center justify-center gap-2 bg-[#171717]/90 hover:bg-[#171717] text-white px-4 rounded-[12px] transition-colors backdrop-blur-sm disabled:opacity-75"
           >
-            {isLoading ? (
+            {showLoading ? (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
             ) : (
               <Icon 
@@ -178,13 +190,13 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
               />
             )}
             <span className="text-sm font-medium font-geist">
-              {isLoading ? 'Downloading...' : `Download (${downloadCount})`}
+              {showLoading ? 'Downloading...' : `Download (${formattedCount})`}
             </span>
           </button>
         </div>
         
         {/* Loading Overlay */}
-        {isLoading && (
+        {showLoading && (
           <motion.div 
             className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20"
             initial={{ opacity: 0 }}
@@ -197,14 +209,14 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
       </motion.article>
       
       {/* Mobile/Tablet Download Button - Below image, always visible */}
-      <div className="block md:hidden mt-3">
+      <div className="block lg:hidden mt-3">
         <button
           id={downloadButtonId}
           onClick={handleDownload}
-          disabled={isLoading}
-          className="w-full flex items-center justify-center gap-2 bg-[#171717] hover:bg-[#171717]/90 text-white px-4 py-3 rounded-lg transition-colors"
+          disabled={showLoading}
+          className="w-full flex items-center justify-center gap-2 bg-[#171717] hover:bg-[#171717]/90 text-white px-4 py-3 rounded-lg transition-colors disabled:opacity-75"
         >
-          {isLoading ? (
+          {showLoading ? (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
           ) : (
             <Icon 
@@ -215,7 +227,7 @@ export const WallpaperCard: React.FC<WallpaperCardProps> = ({
             />
           )}
           <span className="text-sm font-medium font-geist">
-            {isLoading ? 'Downloading...' : `Download (${downloadCount})`}
+            {showLoading ? 'Downloading...' : `Download (${formattedCount})`}
           </span>
         </button>
       </div>

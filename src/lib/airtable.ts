@@ -25,6 +25,7 @@ interface AirtableRecord {
     'Download Link'?: string;
     'Is Hot'?: boolean;
     'Download Count'?: string;
+    'Download Count Raw'?: number;
   };
 }
 
@@ -41,11 +42,23 @@ export interface Wallpaper {
   type: 'mobile' | 'desktop' | 'profile';
   isHot: boolean;
   downloadCount: string;
+  downloadCountRaw: number;
 }
 
 // Airtable configuration
 const AIRTABLE_BASE_ID = 'appEiIIDf9PdLxOyZ';
 const AIRTABLE_API_KEY = 'pat8nQDGNPNyaHVZX.167c235ed86dbc2a243d2e118ce823f76b55fb3e7798daf4f0357c643318cabe';
+
+// Helper function to format download count
+function formatDownloadCount(count: number): string {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1)}M`;
+  } else if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`;
+  } else {
+    return count.toString();
+  }
+}
 
 function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   const typeMap: Record<string, 'mobile' | 'desktop' | 'profile'> = {
@@ -67,6 +80,12 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   // Get the type (take the first one if it's an array)
   const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type[0] : record.fields.Type;
 
+  // Get raw download count or default to 1000
+  const downloadCountRaw = record.fields['Download Count Raw'] || 1000;
+  
+  // Use the formatted download count from Airtable or format the raw count
+  const downloadCount = record.fields['Download Count'] || formatDownloadCount(downloadCountRaw);
+
   return {
     id: record.id,
     name: record.fields.Name || 'Untitled Wallpaper',
@@ -75,7 +94,8 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
     imageUrl,
     type: typeMap[typeValue] || 'mobile',
     isHot: record.fields['Is Hot'] || false,
-    downloadCount: record.fields['Download Count'] || '1K'
+    downloadCount,
+    downloadCountRaw
   };
 }
 
@@ -128,4 +148,105 @@ export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): 
     console.error('Error fetching from Airtable:', error);
     throw error; // Don't fallback to mock data, let the error show
   }
-} 
+}
+
+// Update download count in Airtable
+export async function updateDownloadCount(wallpaperId: string, currentCount: number): Promise<number> {
+  try {
+    const newCount = currentCount + 1;
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers/${wallpaperId}`;
+    
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          'Download Count Raw': newCount,
+          'Download Count': formatDownloadCount(newCount)
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to update download count:', response.status, response.statusText);
+      return currentCount; // Return original count if update fails
+    }
+    
+    console.log(`Updated download count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
+    return newCount;
+    
+  } catch (error) {
+    console.error('Error updating download count:', error);
+    return currentCount; // Return original count if update fails
+  }
+}
+
+// In-memory store for real-time download counts
+class DownloadCountStore {
+  private counts: Map<string, number> = new Map();
+  private listeners: Set<(wallpaperId: string, count: number) => void> = new Set();
+
+  // Initialize with data from Airtable
+  initialize(wallpapers: Wallpaper[]) {
+    wallpapers.forEach(wallpaper => {
+      this.counts.set(wallpaper.id, wallpaper.downloadCountRaw);
+    });
+  }
+
+  // Get current count
+  getCount(wallpaperId: string): number {
+    return this.counts.get(wallpaperId) || 0;
+  }
+
+  // Get formatted count
+  getFormattedCount(wallpaperId: string): string {
+    const count = this.getCount(wallpaperId);
+    return formatDownloadCount(count);
+  }
+
+  // Increment count locally and update Airtable
+  async incrementCount(wallpaperId: string): Promise<void> {
+    const currentCount = this.getCount(wallpaperId);
+    const newCount = currentCount + 1;
+    
+    // Update locally first for instant feedback
+    this.counts.set(wallpaperId, newCount);
+    this.notifyListeners(wallpaperId, newCount);
+    
+    // Update Airtable in the background
+    try {
+      await updateDownloadCount(wallpaperId, currentCount);
+    } catch (error) {
+      // If Airtable update fails, revert the local change
+      this.counts.set(wallpaperId, currentCount);
+      this.notifyListeners(wallpaperId, currentCount);
+      console.error('Failed to update download count in Airtable:', error);
+    }
+  }
+
+  // Subscribe to count changes
+  subscribe(callback: (wallpaperId: string, count: number) => void) {
+    this.listeners.add(callback);
+    
+    // Return unsubscribe function
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  private notifyListeners(wallpaperId: string, count: number) {
+    this.listeners.forEach(callback => {
+      try {
+        callback(wallpaperId, count);
+      } catch (error) {
+        console.error('Error in download count listener:', error);
+      }
+    });
+  }
+}
+
+// Export singleton instance
+export const downloadCountStore = new DownloadCountStore(); 
