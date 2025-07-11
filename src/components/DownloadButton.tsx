@@ -39,9 +39,7 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       </div>
       <div 
         className="text-white text-center text-sm font-normal break-words"
-        style={{ 
-          fontFamily: 'Britti Sans Trial'
-        }}
+        
       >
         Download ({downloadCount})
       </div>
