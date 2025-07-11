@@ -134,7 +134,7 @@ const About = () => {
               >
                 <div className="w-64 h-64 bg-gradient-to-br from-[#C8102E] to-[#8B0000] rounded-2xl flex items-center justify-center mx-auto xl:mx-0 p-8">
                   <img 
-                    src="/assets/logo.svg" 
+                    src="/logo.svg" 
                     alt="Mahm Formula Logo" 
                     className="w-full h-full object-contain filter brightness-0 invert"
                   />

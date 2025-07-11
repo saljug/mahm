@@ -110,7 +110,7 @@ const Index = () => {
       />
       
       {/* Main content with responsive margins and mobile bottom padding */}
-      <main className="md:ml-[270px] flex-1 px-5 pt-8 pb-8 md:pb-8 pb-24 overflow-hidden flex-col justify-start items-start gap-[52px] flex">
+      <main className="lg:ml-[270px] flex-1 px-5 pt-8 pb-24 lg:pb-8 overflow-hidden flex-col justify-start items-start gap-[52px] flex">
         <div className="w-full flex-col justify-start items-start gap-6 flex">
           {/* Header */}
           <header className="w-full justify-start items-center gap-6 inline-flex">

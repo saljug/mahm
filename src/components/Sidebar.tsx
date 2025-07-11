@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick }) => 
 
   return (
     <nav 
-      className="fixed left-0 top-0 hidden md:flex w-[270px] h-screen flex-col items-start gap-2.5 shrink-0 p-2.5 overflow-hidden z-50 bg-[#0A0A0A]" 
+      className="fixed left-0 top-0 hidden lg:flex w-[270px] h-screen flex-col items-start gap-2.5 shrink-0 p-2.5 overflow-hidden z-50 bg-[#0A0A0A]" 
       aria-label="Main navigation"
     >
       <div className="flex flex-col items-start self-stretch">

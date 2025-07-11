@@ -35,7 +35,7 @@ export const MobileNavbar: React.FC<MobileNavbarProps> = ({ activeItem, onItemCl
 
   return (
     <nav 
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[#171717] border-t border-[#333] md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#171717] border-t border-[#333] lg:hidden"
       aria-label="Mobile navigation"
     >
       <div className="flex justify-around items-center h-16 px-4">
