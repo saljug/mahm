@@ -12,10 +12,13 @@ export function useDownloadCount(wallpaperId: string) {
     const initialCount = downloadCountStore.getCount(wallpaperId);
     setCount(initialCount);
     setFormattedCount(downloadCountStore.getFormattedCount(wallpaperId));
+    
+    console.log(`useDownloadCount initialized for ${wallpaperId}: ${initialCount}`);
 
     // Subscribe to count changes for this specific wallpaper
     const unsubscribe = downloadCountStore.subscribe((updatedWallpaperId, newCount) => {
       if (updatedWallpaperId === wallpaperId) {
+        console.log(`useDownloadCount received update for ${wallpaperId}: ${newCount}`);
         setCount(newCount);
         setFormattedCount(downloadCountStore.getFormattedCount(wallpaperId));
       }
@@ -28,6 +31,7 @@ export function useDownloadCount(wallpaperId: string) {
   const incrementCount = useCallback(async () => {
     if (isUpdating) return; // Prevent double-clicks
     
+    console.log(`useDownloadCount: incrementing ${wallpaperId}`);
     setIsUpdating(true);
     try {
       await downloadCountStore.incrementCount(wallpaperId);

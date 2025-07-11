@@ -207,12 +207,85 @@ export async function updateDownloadCount(wallpaperId: string, currentCount: num
 class DownloadCountStore {
   private counts: Map<string, number> = new Map();
   private listeners: Set<(wallpaperId: string, count: number) => void> = new Set();
+  private initialized: Set<string> = new Set();
+  private readonly STORAGE_KEY = 'mahm-download-counts';
 
-  // Initialize with data from Airtable
+  constructor() {
+    // Load persisted counts from localStorage on initialization
+    this.loadFromStorage();
+  }
+
+  // Load counts from localStorage
+  private loadFromStorage() {
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        
+        // Restore counts
+        if (data.counts) {
+          Object.entries(data.counts).forEach(([id, count]) => {
+            this.counts.set(id, count as number);
+          });
+        }
+        
+        // Restore initialized set
+        if (data.initialized) {
+          data.initialized.forEach((id: string) => {
+            this.initialized.add(id);
+          });
+        }
+        
+        console.log('Loaded download counts from localStorage:', data);
+      }
+    } catch (error) {
+      console.error('Failed to load download counts from localStorage:', error);
+    }
+  }
+
+  // Save counts to localStorage
+  private saveToStorage() {
+    try {
+      const data = {
+        counts: Object.fromEntries(this.counts),
+        initialized: Array.from(this.initialized),
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+      console.log('Saved download counts to localStorage');
+    } catch (error) {
+      console.error('Failed to save download counts to localStorage:', error);
+    }
+  }
+
+  // Initialize with data from Airtable - only set counts that don't already exist
   initialize(wallpapers: Wallpaper[]) {
+    let hasChanges = false;
+    
     wallpapers.forEach(wallpaper => {
-      this.counts.set(wallpaper.id, wallpaper.downloadCountRaw);
+      // Only initialize if we haven't seen this wallpaper before
+      // This prevents overwriting incremented counts on page refresh
+      if (!this.initialized.has(wallpaper.id)) {
+        // If we have a stored count for this wallpaper, use the higher value
+        const storedCount = this.counts.get(wallpaper.id) || 0;
+        const airtableCount = wallpaper.downloadCountRaw;
+        const finalCount = Math.max(storedCount, airtableCount);
+        
+        this.counts.set(wallpaper.id, finalCount);
+        this.initialized.add(wallpaper.id);
+        hasChanges = true;
+        
+        console.log(`Initialized count for ${wallpaper.name}: stored=${storedCount}, airtable=${airtableCount}, using=${finalCount}`);
+      } else {
+        console.log(`Skipping re-initialization for ${wallpaper.name}, current count: ${this.getCount(wallpaper.id)}`);
+      }
     });
+    
+    // Save to storage if we made changes
+    if (hasChanges) {
+      this.saveToStorage();
+    }
   }
 
   // Get current count
@@ -231,17 +304,25 @@ class DownloadCountStore {
     const currentCount = this.getCount(wallpaperId);
     const newCount = currentCount + 1;
     
+    console.log(`Incrementing count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
+    
     // Update locally first for instant feedback
     this.counts.set(wallpaperId, newCount);
     this.notifyListeners(wallpaperId, newCount);
     
+    // Save to localStorage immediately
+    this.saveToStorage();
+    
     // Update Airtable in the background
     try {
-      await updateDownloadCount(wallpaperId, currentCount);
+      const updatedCount = await updateDownloadCount(wallpaperId, currentCount);
+      console.log(`Airtable updated successfully to: ${updatedCount}`);
     } catch (error) {
       // If Airtable update fails, revert the local change
+      console.error('Airtable update failed, reverting local change');
       this.counts.set(wallpaperId, currentCount);
       this.notifyListeners(wallpaperId, currentCount);
+      this.saveToStorage(); // Save the reverted state
       console.error('Failed to update download count in Airtable:', error);
     }
   }
@@ -264,6 +345,22 @@ class DownloadCountStore {
         console.error('Error in download count listener:', error);
       }
     });
+  }
+
+  // Debug method to see current state
+  getDebugInfo() {
+    return {
+      counts: Object.fromEntries(this.counts),
+      initialized: Array.from(this.initialized)
+    };
+  }
+
+  // Clear storage (for debugging)
+  clearStorage() {
+    localStorage.removeItem(this.STORAGE_KEY);
+    this.counts.clear();
+    this.initialized.clear();
+    console.log('Cleared download count storage');
   }
 }
 
