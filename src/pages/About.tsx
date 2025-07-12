@@ -97,9 +97,6 @@ const About = () => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2, duration: 0.5 }}
                 >
-                  <div className="w-12 h-12 bg-[#C8102E] rounded-full flex items-center justify-center">
-                    <Icon icon="solar:cup-star-bold" width={24} height={24} className="text-white" />
-                  </div>
                   <h2 className="text-white text-2xl lg:text-3xl font-bold">
                     The Premium F1 Experience
                   </h2>
@@ -254,6 +251,14 @@ const About = () => {
               </div>
             </div>
           </motion.section>
+
+          {/* Compact Terms of Use Section */}
+          <div className="w-full max-w-4xl mx-auto mt-8 text-sm text-[#888] text-center leading-relaxed px-2 pb-8">
+            <Icon icon="solar:shield-check-linear" width={16} height={16} className="inline align-text-bottom mr-1" />
+            <span>
+              Many wallpapers on this site are original edits by Mahm Formula, but some use images found on the internet (including Pinterest) as a base. Logos and trademarks used in wallpapers (such as F1 team logos, sponsors, etc.) are the property of their respective owners; we do not claim copyright or endorsement for these elements, and they are used for creative/fan purposes only. We do not claim copyright on the underlying photos, only on our edits and compositions. Please do not resell, redistribute, or claim these wallpapers as your own. Sharing is welcome, but always credit @mahmformula. If you are a copyright holder and wish for an image to be removed, please contact <a href="mailto:hi@mahmformula.com" className="text-[#C8102E] hover:underline">hi@mahmformula.com</a>&nbsp;and we will promptly comply.
+            </span>
+          </div>
           
         </div>
       </main>

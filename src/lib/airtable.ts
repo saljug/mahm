@@ -43,6 +43,7 @@ export interface Wallpaper {
   isHot: boolean;
   downloadCount: string;
   downloadCountRaw: number;
+  createdTime: string;
 }
 
 // Airtable configuration
@@ -118,7 +119,8 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
     type: typeMap[typeValue] || 'mobile',
     isHot: record.fields['Is Hot'] || false,
     downloadCount,
-    downloadCountRaw
+    downloadCountRaw,
+    createdTime: record.createdTime
   };
 }
 

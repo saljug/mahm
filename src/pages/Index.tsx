@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { Icon } from '@iconify/react';
 import { Sidebar } from '@/components/Sidebar';
 import { MobileNavbar } from '@/components/MobileNavbar';
 import { RadioFilter } from '@/components/RadioFilter';
@@ -11,11 +12,32 @@ const Index = () => {
   const [activeMenuItem, setActiveMenuItem] = useState('wallpapers');
   const [selectedFilter, setSelectedFilter] = useState<'mobile' | 'desktop' | 'profile'>('mobile');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'most-downloaded' | 'least-downloaded'>('newest');
 
-  const { wallpapers, allWallpapers, availableTags, isLoading, error, refetch } = useWallpapers({ 
+  const { wallpapers: rawWallpapers, allWallpapers, availableTags, isLoading, error, refetch } = useWallpapers({ 
     type: selectedFilter,
     selectedTags 
   });
+
+  // Sort wallpapers based on selected sort option
+  const wallpapers = useMemo(() => {
+    if (!rawWallpapers) return [];
+    
+    const sorted = [...rawWallpapers];
+    
+    switch (sortBy) {
+      case 'newest':
+        return sorted.sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime());
+      case 'oldest':
+        return sorted.sort((a, b) => new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime());
+      case 'most-downloaded':
+        return sorted.sort((a, b) => Number(b.downloadCountRaw || 0) - Number(a.downloadCountRaw || 0));
+      case 'least-downloaded':
+        return sorted.sort((a, b) => Number(a.downloadCountRaw || 0) - Number(b.downloadCountRaw || 0));
+      default:
+        return sorted;
+    }
+  }, [rawWallpapers, sortBy]);
 
   // Check if we're showing cross-type results
   const isShowingCrossTypeResults = selectedTags.length > 0 && wallpapers.length > 0 && 
@@ -70,6 +92,10 @@ const Index = () => {
     if (!selectedTags.includes(tag)) {
       setSelectedTags([...selectedTags, tag]);
     }
+  };
+
+  const handleSortChange = (value: string) => {
+    setSortBy(value as 'newest' | 'oldest' | 'most-downloaded' | 'least-downloaded');
   };
 
   const containerVariants = {
@@ -134,15 +160,91 @@ const Index = () => {
               />
             </div>
             
-            {/* Tag Filter */}
+                        {/* Tag Filter with Item Count and Sorting */}
             {availableTags.length > 0 && (
-              <TagFilter
-                availableTags={availableTags}
-                selectedTags={selectedTags}
-                onTagsChange={handleTagsChange}
-              />
-            )}
-                    </section>
+              <div className="w-full">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-white text-sm font-medium font-geist">
+                      Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length} selected)`}
+                    </h3>
+                    {!isLoading && wallpapers.length > 0 && (
+                      <span className="text-[#737373] text-sm font-geist">
+                        • {wallpapers.length} {wallpapers.length === 1 ? 'Item' : 'Items'} Listed
+                      </span>
+                    )}
+                  </div>
+                  
+                  {!isLoading && wallpapers.length > 0 && (
+                    <div className="flex items-center gap-3">
+                      <span className="text-white/70 text-sm font-medium font-geist">Sort by:</span>
+                      <div className="relative group">
+                        <select
+                          value={sortBy}
+                          onChange={(e) => handleSortChange(e.target.value)}
+                          className="bg-[#171717] text-white text-sm border border-[#333] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:border-[#C8102E] hover:border-[#555] transition-all duration-200 font-geist appearance-none cursor-pointer shadow-sm hover:shadow-md focus:shadow-lg"
+                        >
+                          <option value="newest" className="bg-[#171717] text-white">Newest First</option>
+                          <option value="oldest" className="bg-[#171717] text-white">Oldest First</option>
+                          <option value="most-downloaded" className="bg-[#171717] text-white">Most Downloaded</option>
+                          <option value="least-downloaded" className="bg-[#171717] text-white">Least Downloaded</option>
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 group-hover:scale-110">
+                          <Icon 
+                            icon="solar:alt-arrow-down-linear" 
+                            width={16} 
+                            height={16} 
+                            className="text-white/60 group-hover:text-white/80"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  {availableTags.map((tag) => {
+                    const isSelected = selectedTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedTags(selectedTags.filter(t => t !== tag));
+                          } else {
+                            setSelectedTags([...selectedTags, tag]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium font-geist transition-colors ${
+                          isSelected
+                            ? 'bg-[#C8102E] text-white'
+                            : 'bg-[#171717] text-[#EDEDED] hover:bg-[#171717]/80 border border-[#333]'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                  
+                  {/* Clear all button */}
+                  {selectedTags.length > 0 && (
+                    <button
+                      onClick={() => setSelectedTags([])}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium font-geist bg-[#171717] text-[#737373] hover:text-white hover:bg-[#171717]/80 border border-[#333] transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                
+                                 {selectedTags.length > 0 && (
+                   <div className="mt-3 text-xs text-[#737373] font-geist">
+                     Showing wallpapers with any selected tags
+                   </div>
+                 )}
+                </div>
+              )}
+          </section>
           
           {/* Cross-type Results Notification */}
           {isShowingCrossTypeResults && (
@@ -195,7 +297,7 @@ const Index = () => {
             <div className="w-full flex justify-center items-center py-20">
               <div className="flex flex-col items-center gap-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-                <p className="text-white/60 text-sm font-geist">Loading {selectedFilter} wallpapers from Airtable...</p>
+                <p className="text-white/60 text-sm font-geist">Loading...</p>
               </div>
             </div>
           ) : wallpapers.length === 0 && !error ? (
@@ -244,6 +346,23 @@ const Index = () => {
                 </motion.div>
               ))}
             </motion.section>
+          )}
+          
+          {/* Footer - Terms Reference */}
+          {!isLoading && wallpapers.length > 0 && (
+            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4 py-8 px-4 text-center border-t border-[#333]/30 mt-12">
+              <div className="flex items-center gap-2 text-[#737373] text-sm">
+                <Icon icon="solar:shield-check-linear" width={16} height={16} />
+                <span>By downloading wallpapers, you agree to our</span>
+              </div>
+              <a 
+                href="/about" 
+                className="text-[#C8102E] hover:text-[#C8102E]/80 text-sm font-medium transition-colors underline decoration-dotted underline-offset-2"
+              >
+                Terms of Use
+              </a>
+              <span className="text-[#737373] text-sm">• Personal use only</span>
+            </div>
           )}
         </div>
       </main>
