@@ -241,6 +241,13 @@ export async function updateDownloadCount(wallpaperId: string, currentCount: num
     const responseData = await response.json();
     console.log('Successful Airtable update:', responseData);
     console.log(`Updated download count for ${wallpaperId}: ${currentCount} -> ${newCount}`);
+    // Dynamically import to avoid circular dependency
+    try {
+      const { invalidateWallpapersCache } = await import('@/hooks/useWallpapers');
+      invalidateWallpapersCache();
+    } catch (e) {
+      console.warn('Could not invalidate cache after download count update:', e);
+    }
     return newCount;
     
   } catch (error) {
