@@ -95,7 +95,8 @@ const getTeamLogo = (tagName: string): string | null => {
     'sauber': '/Team Logos/kick sauber.svg',
     'racing bull': '/Team Logos/racing bull.svg',
     'racing bulls': '/Team Logos/racing bull.svg',
-    'rb': '/Team Logos/racing bull.svg'
+    'rb': '/Team Logos/racing bull.svg',
+    'f1': '/Team Logos/f1.svg'
   };
   
   const normalizedTagName = tagName.toLowerCase().trim();
