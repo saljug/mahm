@@ -20,6 +20,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick }) => 
       iconInactive: 'solar:album-linear'
     },
     {
+      id: 'shop',
+      label: 'Shop',
+      path: '/shop',
+      iconActive: 'solar:shop-bold',
+      iconInactive: 'solar:shop-linear'
+    },
+    {
       id: 'about',
       label: 'About',
       path: '/about',

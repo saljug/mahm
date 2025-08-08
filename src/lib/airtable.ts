@@ -46,6 +46,18 @@ export interface Wallpaper {
   createdTime: string;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price?: string;
+  imageUrl: string;
+  etsyLink: string;
+  tags: string[];
+  isHot: boolean;
+  createdTime: string;
+}
+
 // Airtable configuration
 const AIRTABLE_BASE_ID = import.meta.env.VITE_AIRTABLE_BASE_ID || 'appEiIIDf9PdLxOyZ';
 const AIRTABLE_API_KEY = import.meta.env.VITE_AIRTABLE_API_KEY || 'pat8nQDGNPNyaHVZX.d39ccfa7929fa2c23e8937543c0c73cdd6a8afe123556c8ec57bcbf2617d3162';
@@ -396,4 +408,83 @@ class DownloadCountStore {
 }
 
 // Export singleton instance
-export const downloadCountStore = new DownloadCountStore(); 
+export const downloadCountStore = new DownloadCountStore();
+
+// Product-related functions
+interface ProductAirtableRecord {
+  id: string;
+  createdTime: string;
+  fields: {
+    Name: string;
+    Description?: string;
+    Price?: string;
+    'Image Link'?: string;
+    Link?: string;
+    Tags?: string[];
+    'Is Hot'?: boolean;
+    Trending?: boolean;
+    Attachments?: AirtableAttachment[];
+  };
+}
+
+function transformProductRecord(record: ProductAirtableRecord): Product {
+  // Use the exact field names confirmed from the API
+  const imageUrl = record.fields['Image Link'] || '';
+  const etsyLink = record.fields['Link'] || '';
+
+  return {
+    id: record.id,
+    name: record.fields.Name || 'Untitled Product',
+    description: record.fields.Description || '',
+    price: record.fields.Price || '',
+    imageUrl,
+    etsyLink,
+    tags: record.fields.Tags || [],
+    isHot: record.fields['Trending'] || record.fields['Is Hot'] || false,
+    createdTime: record.createdTime
+  };
+}
+
+export async function fetchProducts(): Promise<Product[]> {
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Products`;
+    
+    console.log('Fetching products from Airtable:', url);
+    console.log('Using API Key:', AIRTABLE_API_KEY.substring(0, 10) + '...');
+    console.log('Using Base ID:', AIRTABLE_BASE_ID);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('Products response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Airtable Products API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText,
+        requestUrl: url,
+        baseId: AIRTABLE_BASE_ID,
+        apiKeyPrefix: AIRTABLE_API_KEY.substring(0, 10) + '...'
+      });
+      throw new Error(`Airtable Products API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data: { records: ProductAirtableRecord[] } = await response.json();
+    console.log('Airtable products response:', data);
+    
+    const products = data.records.map(transformProductRecord);
+    console.log('Transformed products:', products);
+    
+    return products;
+    
+  } catch (error) {
+    console.error('Error fetching products from Airtable:', error);
+    throw error;
+  }
+} 
