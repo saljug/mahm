@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Icon } from '@iconify/react';
 import { Sidebar } from '@/components/Sidebar';
 import { MobileNavbar } from '@/components/MobileNavbar';
@@ -8,16 +8,304 @@ import { TagFilter } from '@/components/TagFilter';
 import { WallpaperCard } from '@/components/WallpaperCard';
 import { useWallpapers } from '@/hooks/useWallpapers';
 
+// Team colors (darker accent versions)
+const teamColors: Record<string, string> = {
+  // Alpine (Blue)
+  'alpine': '#0077C9', // alpine blue
+  'gasly': '#0077C9',
+  'colapinto': '#0077C9',
+  
+  // Aston Martin (Green)
+  'aston': '#01655C', // aston martin green
+  'aston martin': '#01655C',
+  'stroll': '#01655C',
+  'alonso': '#01655C',
+  
+  // Ferrari (Red)
+  'ferrari': '#991B1B', // dark red
+  'leclerc': '#991B1B',
+  'hamilton': '#991B1B',
+  'ham': '#991B1B',
+  
+  // Haas (Dark Gray/Red accent)
+  'haas': '#374151', // dark gray
+  'hass': '#374151',
+  'ocon': '#374151',
+  'bearman': '#374151',
+  
+  // Kick Sauber (Green)
+  'kick sauber': '#00E703', // sauber green
+  'sauber': '#00E703',
+  'hulkenberg': '#00E703',
+  'hulk': '#00E703',
+  'bortoleto': '#00E703',
+  
+  // McLaren (Orange)
+  'mclaren': '#C2410C', // dark orange
+  'norris': '#C2410C',
+  'lando': '#C2410C',
+  'piastri': '#C2410C',
+  'oscar': '#C2410C',
+  
+  // Mercedes (Teal)
+  'mercedes': '#0F766E', // dark teal
+  'russell': '#0F766E',
+  'george': '#0F766E',
+  'antonelli': '#0F766E',
+  'kimi': '#0F766E',
+  
+  // Racing Bulls (Blue)
+  'racing bull': '#1534CC', // racing bull blue
+  'racing bulls': '#1534CC',
+  'rb': '#1534CC',
+  'lawson': '#1534CC',
+  'hadjar': '#1534CC',
+  
+  // Red Bull Racing (Red)
+  'redbull': '#E21B4D', // red bull red
+  'red bull': '#E21B4D',
+  'red bull racing': '#E21B4D',
+  'verstappen': '#E21B4D',
+  'max': '#E21B4D',
+  'tsunoda': '#E21B4D',
+  
+  // Williams (Blue)
+  'williams': '#1A67DB', // williams blue
+  'albon': '#1A67DB',
+  'sainz': '#1A67DB',
+  'carlos': '#1A67DB'
+};
+
+// Team logo mapping
+const getTeamLogo = (tagName: string): string | null => {
+  const teamLogos: Record<string, string> = {
+    'ferrari': '/Team Logos/ferrari.svg',
+    'mercedes': '/Team Logos/mercedes.svg',
+    'redbull': '/Team Logos/redbull.svg',
+    'red bull': '/Team Logos/redbull.svg',
+    'red bull racing': '/Team Logos/redbull.svg',
+    'mclaren': '/Team Logos/mclaren.svg',
+    'alpine': '/Team Logos/alpine.svg',
+    'aston': '/Team Logos/aston.svg',
+    'aston martin': '/Team Logos/aston.svg',
+    'williams': '/Team Logos/williams.svg',
+    'hass': '/Team Logos/hass.svg',
+    'haas': '/Team Logos/hass.svg',
+    'kick sauber': '/Team Logos/kick sauber.svg',
+    'sauber': '/Team Logos/kick sauber.svg',
+    'racing bull': '/Team Logos/racing bull.svg',
+    'racing bulls': '/Team Logos/racing bull.svg',
+    'rb': '/Team Logos/racing bull.svg'
+  };
+  
+  const normalizedTagName = tagName.toLowerCase().trim();
+  return teamLogos[normalizedTagName] || null;
+};
+
+// Driver photo mapping (2025 F1 Grid)
+const getDriverPhoto = (tagName: string): string | null => {
+  const driverPhotos: Record<string, string> = {
+    // Alpine
+    'gasly': '/Drivers Photos/gasly.png',
+    'colapinto': '/Drivers Photos/colapinto.png',
+    
+    // Aston Martin
+    'stroll': '/Drivers Photos/stroll.png',
+    'alonso': '/Drivers Photos/alonso.png',
+    
+    // Ferrari
+    'leclerc': '/Drivers Photos/leclerc.png',
+    'hamilton': '/Drivers Photos/ham.png',
+    'ham': '/Drivers Photos/ham.png',
+    
+    // Haas
+    'ocon': '/Drivers Photos/ocon.png',
+    'bearman': '/Drivers Photos/bearman.png',
+    
+    // Kick Sauber
+    'hulkenberg': '/Drivers Photos/hulk.png',
+    'hulk': '/Drivers Photos/hulk.png',
+    'bortoleto': '/Drivers Photos/bortoleto.png',
+    
+    // McLaren
+    'norris': '/Drivers Photos/lando.png',
+    'lando': '/Drivers Photos/lando.png',
+    'piastri': '/Drivers Photos/oscar.png',
+    'oscar': '/Drivers Photos/oscar.png',
+    
+    // Mercedes
+    'russell': '/Drivers Photos/george.png',
+    'george': '/Drivers Photos/george.png',
+    'antonelli': '/Drivers Photos/kimi.png',
+    'kimi': '/Drivers Photos/kimi.png',
+    
+    // Racing Bulls
+    'lawson': '/Drivers Photos/lawson.png',
+    'hadjar': '/Drivers Photos/hadjar.png',
+    
+    // Red Bull Racing
+    'verstappen': '/Drivers Photos/max.png',
+    'max': '/Drivers Photos/max.png',
+    'tsunoda': '/Drivers Photos/tsunoda.png',
+    
+    // Williams
+    'albon': '/Drivers Photos/albon.png',
+    'sainz': '/Drivers Photos/carlos.png',
+    'carlos': '/Drivers Photos/carlos.png'
+  };
+  
+  const normalizedTagName = tagName.toLowerCase().trim();
+  return driverPhotos[normalizedTagName] || null;
+};
+
+// Get team color for tag
+const getTeamColor = (tagName: string): string => {
+  const normalizedTagName = tagName.toLowerCase().trim();
+  return teamColors[normalizedTagName] || '#374151'; // default dark gray
+};
+
+// Check if tag is a team or driver
+const getTagType = (tagName: string): 'team' | 'driver' | 'other' => {
+  const normalizedTagName = tagName.toLowerCase().trim();
+  
+  const teams = ['alpine', 'aston', 'aston martin', 'ferrari', 'haas', 'hass', 'kick sauber', 'sauber', 'mclaren', 'mercedes', 'racing bull', 'racing bulls', 'rb', 'redbull', 'red bull', 'red bull racing', 'williams'];
+  const drivers = ['gasly', 'colapinto', 'stroll', 'alonso', 'leclerc', 'hamilton', 'ham', 'ocon', 'bearman', 'hulkenberg', 'hulk', 'bortoleto', 'norris', 'lando', 'piastri', 'oscar', 'russell', 'george', 'antonelli', 'kimi', 'lawson', 'hadjar', 'verstappen', 'max', 'tsunoda', 'albon', 'sainz', 'carlos'];
+  
+  if (teams.includes(normalizedTagName)) return 'team';
+  if (drivers.includes(normalizedTagName)) return 'driver';
+  return 'other';
+};
+
+// Sort tags by teams alphabetically with their drivers grouped together
+const sortTagsByTeams = (tags: string[]): string[] => {
+  // Define unique team groups with their drivers
+  const uniqueTeamGroups = [
+    { 
+      teamNames: ['alpine'], 
+      drivers: ['gasly', 'colapinto'],
+      primaryTeam: 'alpine'
+    },
+    { 
+      teamNames: ['aston', 'aston martin'], 
+      drivers: ['alonso', 'stroll'],
+      primaryTeam: 'aston martin'
+    },
+    { 
+      teamNames: ['ferrari'], 
+      drivers: ['hamilton', 'ham', 'leclerc'],
+      primaryTeam: 'ferrari'
+    },
+    { 
+      teamNames: ['haas', 'hass'], 
+      drivers: ['bearman', 'ocon'],
+      primaryTeam: 'haas'
+    },
+    { 
+      teamNames: ['kick sauber', 'sauber'], 
+      drivers: ['bortoleto', 'hulkenberg', 'hulk'],
+      primaryTeam: 'kick sauber'
+    },
+    { 
+      teamNames: ['mclaren'], 
+      drivers: ['lando', 'norris', 'oscar', 'piastri'],
+      primaryTeam: 'mclaren'
+    },
+    { 
+      teamNames: ['mercedes'], 
+      drivers: ['antonelli', 'george', 'kimi', 'russell'],
+      primaryTeam: 'mercedes'
+    },
+    { 
+      teamNames: ['racing bull', 'racing bulls', 'rb'], 
+      drivers: ['hadjar', 'lawson'],
+      primaryTeam: 'racing bull'
+    },
+    { 
+      teamNames: ['redbull', 'red bull', 'red bull racing'], 
+      drivers: ['max', 'tsunoda', 'verstappen'],
+      primaryTeam: 'redbull'
+    },
+    { 
+      teamNames: ['williams'], 
+      drivers: ['albon', 'carlos', 'sainz'],
+      primaryTeam: 'williams'
+    }
+  ];
+
+  const sortedTags: string[] = [];
+  const usedTags = new Set<string>();
+  
+  // Sort teams alphabetically by primary team name
+  const sortedTeams = uniqueTeamGroups.sort((a, b) => a.primaryTeam.localeCompare(b.primaryTeam));
+  
+  for (const teamGroup of sortedTeams) {
+    // Find any team name from this group that exists in tags
+    const availableTeamTags = teamGroup.teamNames
+      .map(teamName => tags.find(tag => tag.toLowerCase().trim() === teamName.toLowerCase()))
+      .filter((tag): tag is string => tag !== undefined);
+    
+    // Prefer the longest/most specific team name if multiple exist
+    const teamTag = availableTeamTags.sort((a, b) => b.length - a.length)[0];
+    
+    // Add team name FIRST if it exists
+    if (teamTag && !usedTags.has(teamTag)) {
+      sortedTags.push(teamTag);
+      usedTags.add(teamTag);
+    }
+    
+    // Add any other team variants that weren't used
+    availableTeamTags.forEach(tag => {
+      if (tag !== teamTag && !usedTags.has(tag)) {
+        sortedTags.push(tag);
+        usedTags.add(tag);
+      }
+    });
+    
+    // Then add drivers for this team (sorted alphabetically)
+    const teamDrivers = teamGroup.drivers
+      .map(driver => tags.find(tag => tag.toLowerCase().trim() === driver.toLowerCase()))
+      .filter((tag): tag is string => tag !== undefined && !usedTags.has(tag))
+      .sort();
+    
+    teamDrivers.forEach(driver => {
+      sortedTags.push(driver);
+      usedTags.add(driver);
+    });
+  }
+  
+  // Add any remaining tags that aren't teams or drivers
+  const remainingTags = tags
+    .filter(tag => !usedTags.has(tag))
+    .sort();
+  
+  return [...sortedTags, ...remainingTags];
+};
+
 const Index = () => {
   const [activeMenuItem, setActiveMenuItem] = useState('wallpapers');
   const [selectedFilter, setSelectedFilter] = useState<'mobile' | 'desktop' | 'profile'>('mobile');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'most-downloaded' | 'least-downloaded'>('newest');
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+
 
   const { wallpapers: rawWallpapers, allWallpapers, availableTags, isLoading, error, refetch } = useWallpapers({ 
     type: selectedFilter,
     selectedTags 
   });
+
+  // Check for new items in the last 3 days by category
+  const getNewItemsCount = (category: 'mobile' | 'desktop' | 'profile'): number => {
+    if (!allWallpapers) return 0;
+    
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    
+    return allWallpapers.filter(wallpaper => {
+      const createdDate = new Date(wallpaper.createdTime);
+      return wallpaper.type === category && createdDate > threeDaysAgo;
+    }).length;
+  };
 
   // Sort wallpapers based on selected sort option
   const wallpapers = useMemo(() => {
@@ -44,9 +332,27 @@ const Index = () => {
     wallpapers.some(w => w.type !== selectedFilter);
 
   const filterOptions = [
-    { id: 'mobile', label: 'Mobile', value: 'mobile', icon: 'solar:smartphone-linear' },
-    { id: 'desktop', label: 'Desktop', value: 'desktop', icon: 'solar:monitor-outline' },
-    { id: 'profile', label: 'PP', value: 'profile', icon: 'solar:user-circle-linear' }
+    { 
+      id: 'mobile', 
+      label: 'Mobile', 
+      value: 'mobile', 
+      icon: 'solar:smartphone-linear',
+      newCount: getNewItemsCount('mobile')
+    },
+    { 
+      id: 'desktop', 
+      label: 'Desktop', 
+      value: 'desktop', 
+      icon: 'solar:monitor-outline',
+      newCount: getNewItemsCount('desktop')
+    },
+    { 
+      id: 'profile', 
+      label: 'PP', 
+      value: 'profile', 
+      icon: 'solar:user-circle-linear',
+      newCount: getNewItemsCount('profile')
+    }
   ];
 
   // Responsive grid classes based on wallpaper type
@@ -97,6 +403,8 @@ const Index = () => {
   const handleSortChange = (value: string) => {
     setSortBy(value as 'newest' | 'oldest' | 'most-downloaded' | 'least-downloaded');
   };
+
+
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -159,8 +467,7 @@ const Index = () => {
                 name="wallpaper-filter"
               />
             </div>
-            
-                        {/* Tag Filter with Item Count and Sorting */}
+            {/* Tag Filter with Item Count and Sorting */}
             {availableTags.length > 0 && (
               <div className="w-full">
                 <div className="mb-3 flex items-center justify-between">
@@ -202,40 +509,108 @@ const Index = () => {
                   )}
                 </div>
                 
-                <div className="flex flex-wrap gap-2">
-                  {availableTags.map((tag) => {
-                    const isSelected = selectedTags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedTags(selectedTags.filter(t => t !== tag));
-                          } else {
-                            setSelectedTags([...selectedTags, tag]);
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium font-geist transition-colors ${
-                          isSelected
-                            ? 'bg-[#C8102E] text-white'
-                            : 'bg-[#171717] text-[#EDEDED] hover:bg-[#171717]/80 border border-[#333]'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                  
-                  {/* Clear all button */}
-                  {selectedTags.length > 0 && (
-                    <button
-                      onClick={() => setSelectedTags([])}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium font-geist bg-[#171717] text-[#737373] hover:text-white hover:bg-[#171717]/80 border border-[#333] transition-colors"
-                    >
-                      Clear all
-                    </button>
-                  )}
+                {/* Toggle Button for Filter Chips */}
+                <div className="mb-3">
+                  <button
+                    onClick={() => setShowTagDropdown(!showTagDropdown)}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#171717] border border-[#333] rounded-lg text-white text-sm font-geist hover:bg-[#222] hover:border-[#555] transition-all duration-200"
+                  >
+                    <Icon icon="solar:filter-linear" width={16} height={16} />
+                    <span>Tags</span>
+                    {selectedTags.length > 0 && (
+                      <div className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 bg-[#C8102E] text-white text-xs font-semibold rounded-full">
+                        {selectedTags.length > 99 ? '99+' : selectedTags.length}
+                      </div>
+                    )}
+                    <Icon 
+                      icon={showTagDropdown ? "solar:alt-arrow-up-linear" : "solar:alt-arrow-down-linear"} 
+                      width={16} 
+                      height={16} 
+                      className="transition-transform duration-200"
+                    />
+                  </button>
                 </div>
+
+                {/* Collapsible Filter Chips */}
+                <AnimatePresence>
+                  {showTagDropdown && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex flex-wrap gap-2 pb-3">
+                        {sortTagsByTeams(availableTags).map((tag) => {
+                          const isSelected = selectedTags.includes(tag);
+                          const teamLogo = getTeamLogo(tag);
+                          const driverPhoto = getDriverPhoto(tag);
+                          const teamColor = getTeamColor(tag);
+                          const tagType = getTagType(tag);
+                          
+                          return (
+                            <button
+                              key={tag}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedTags(selectedTags.filter(t => t !== tag));
+                                } else {
+                                  setSelectedTags([...selectedTags, tag]);
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium font-geist transition-all duration-200 flex items-center gap-2 ${
+                                isSelected
+                                  ? 'text-white shadow-lg'
+                                  : 'text-[#EDEDED] hover:text-white border border-[#333] hover:border-opacity-50'
+                              }`}
+                              style={{
+                                backgroundColor: isSelected ? teamColor : (tagType !== 'other' ? `${teamColor}20` : '#171717'),
+                                borderColor: isSelected ? teamColor : (tagType !== 'other' ? `${teamColor}40` : '#333')
+                              }}
+                            >
+                              {/* Team Logo */}
+                              {teamLogo && (
+                                <img 
+                                  src={teamLogo} 
+                                  alt={`${tag} logo`} 
+                                  className="w-4 h-4 object-contain flex-shrink-0"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              
+                              {/* Driver Photo */}
+                              {driverPhoto && (
+                                <img 
+                                  src={driverPhoto} 
+                                  alt={`${tag} photo`} 
+                                  className="w-4 h-4 object-cover rounded-full flex-shrink-0"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              
+                              <span className="whitespace-nowrap capitalize">{tag}</span>
+                            </button>
+                          );
+                        })}
+                        
+                        {/* Clear all button */}
+                        {selectedTags.length > 0 && (
+                          <button
+                            onClick={() => setSelectedTags([])}
+                            className="px-3 py-1.5 rounded-full text-xs font-medium font-geist bg-[#171717] text-[#737373] hover:text-white hover:bg-[#171717]/80 border border-[#333] transition-colors"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 
                                  {selectedTags.length > 0 && (
                    <div className="mt-3 text-xs text-[#737373] font-geist">
