@@ -18,7 +18,7 @@ const About = () => {
   const stats = [
     {
       icon: 'solar:users-group-rounded-bold',
-      number: '18K+',
+      number: '22K+',
       label: 'Instagram Followers',
       description: 'Growing community of F1 enthusiasts'
     },
@@ -55,7 +55,7 @@ const About = () => {
     {
       icon: 'solar:rocket-bold',
       title: 'Social Media Marketing',
-      description: 'Leverage our 18K+ Instagram following and viral content expertise for product launches and brand awareness campaigns.'
+      description: 'Leverage our 22K+ Instagram following and viral content expertise for product launches and brand awareness campaigns.'
     }
   ];
 
