@@ -41,10 +41,11 @@ function filterWallpapersByTags(wallpapers: Wallpaper[], selectedTags: string[])
 // Cache for storing all wallpapers data
 let wallpapersCache: Wallpaper[] | null = null;
 let cachePromise: Promise<Wallpaper[]> | null = null;
+let lastKnownCount = 0;
 
 const CACHE_KEY = 'wallpapers_cache';
 const CACHE_TIMESTAMP_KEY = 'wallpapers_cache_timestamp';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache to prevent excessive API calls
 
 // Function to save cache to session storage
 function saveToSessionStorage(data: Wallpaper[]) {
@@ -143,6 +144,10 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
       saveToSessionStorage(globalData);
       cachePromise = null;
       
+      // Track the count for detecting new uploads
+      lastKnownCount = globalData.length;
+      console.log(`📊 Updated known wallpaper count: ${lastKnownCount}`);
+      
       setAllWallpapers(globalData);
       
       // Initialize download count store with global data
@@ -154,6 +159,8 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
       if (!hasWritePermissions) {
         console.warn('⚠️ Current API token does not have write permissions. Download counts will not sync to Airtable.');
       }
+      
+      // Diagnostic is available via console: diagnoseMissingWallpapers()
       
       // Extract unique tags from global data for consistent tag options
       const tags = extractUniqueTags(globalData);
@@ -172,17 +179,33 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
   useEffect(() => {
     if (allWallpapers.length === 0) return;
     
+    console.log(`🔍 FILTERING: Starting with ${allWallpapers.length} total wallpapers`);
+    console.log(`🔍 FILTERING: Requested type: ${type || 'all'}`);
+    console.log(`🔍 FILTERING: Selected tags: [${selectedTags.join(', ')}]`);
+    
     // Filter by type locally
     const typeFiltered = type 
       ? allWallpapers.filter(wallpaper => wallpaper.type === type)
       : allWallpapers;
     
+    console.log(`🔍 FILTERING: After type filter (${type}): ${typeFiltered.length} wallpapers`);
+    
+    // Show type distribution for debugging
+    const typeDistribution = allWallpapers.reduce((acc, w) => {
+      acc[w.type] = (acc[w.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log('🔍 FILTERING: Type distribution:', typeDistribution);
+    
     // Filter by tags locally
     const filteredByTags = filterWallpapersByTags(typeFiltered, selectedTags);
+    
+    console.log(`🔍 FILTERING: After tag filter: ${filteredByTags.length} wallpapers`);
     
     // If no results in current type but we have selected tags, try global search
     if (filteredByTags.length === 0 && selectedTags.length > 0 && type) {
       const globalFiltered = filterWallpapersByTags(allWallpapers, selectedTags);
+      console.log(`🔍 FILTERING: Global search results: ${globalFiltered.length} wallpapers`);
       setFilteredWallpapers(globalFiltered);
     } else {
       setFilteredWallpapers(filteredByTags);
@@ -191,8 +214,26 @@ export function useWallpapers({ type, selectedTags = [] }: UseWallpapersOptions 
 
   // Fetch data only once on mount
   useEffect(() => {
+    // Only clear cache if user explicitly wants to refresh, otherwise use existing cache
     fetchData();
-  }, []); // Remove 'type' dependency
+  }, []); // Remove 'type' dependency and don't invalidate cache on mount
+
+  // Simplified periodic refresh - just clear cache periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timestamp = sessionStorage.getItem(CACHE_TIMESTAMP_KEY);
+      if (timestamp) {
+        const age = Date.now() - parseInt(timestamp);
+        if (age > CACHE_DURATION) {
+          console.log('🔄 Cache expired, refreshing wallpapers...');
+          invalidateWallpapersCache();
+          fetchData();
+        }
+      }
+    }, 60000); // Check every 60 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   const refetch = async () => {
     invalidateWallpapersCache();

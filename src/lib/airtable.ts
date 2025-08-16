@@ -31,6 +31,7 @@ interface AirtableRecord {
 
 interface AirtableResponse {
   records: AirtableRecord[];
+  offset?: string;
 }
 
 export interface Wallpaper {
@@ -84,20 +85,59 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
     'PP': 'profile'
   };
 
-  // Debug: Log all available fields in this record
-  console.log('Available fields in record:', Object.keys(record.fields));
-  console.log('Record fields:', record.fields);
+  // Debug: Log all available fields in this record (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Available fields in record:', Object.keys(record.fields));
+    console.log('Record fields:', record.fields);
+  }
 
   // Get the main image URL (use full size if available, otherwise the main URL)
   const imageUrl = record.fields.Image && record.fields.Image.length > 0 
     ? (record.fields.Image[0].thumbnails?.full?.url || record.fields.Image[0].url)
     : '';
 
+  // DEBUG: Log image processing details for records without images
+  if (process.env.NODE_ENV === 'development' && (!imageUrl || imageUrl.length === 0)) {
+    console.log('🚨 Record without image:', {
+      id: record.id,
+      name: record.fields.Name,
+      hasImageField: !!record.fields.Image,
+      imageArrayLength: record.fields.Image ? record.fields.Image.length : 0,
+      imageArray: record.fields.Image,
+      allFields: Object.keys(record.fields)
+    });
+  }
+
   // Use the image URL as download link if no download link is provided
   const downloadUrl = record.fields['Download Link'] || imageUrl;
 
   // Get the type (take the first one if it's an array)
   const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type[0] : record.fields.Type;
+  
+  // IMPROVED: Also check tags for type inference if Type field is missing or unclear
+  let inferredType: 'mobile' | 'desktop' | 'profile' = typeMap[typeValue] || 'mobile';
+  
+  // If we couldn't map the type from the Type field, try to infer from tags
+  if (!typeMap[typeValue] && record.fields.Tags) {
+    const tags = record.fields.Tags;
+    const hasProfileTag = tags.some(tag => 
+      ['pp', 'profile', 'profile picture', 'avatar'].includes(tag.toLowerCase())
+    );
+    const hasDesktopTag = tags.some(tag => 
+      ['desktop', 'pc', 'computer', 'wallpaper'].includes(tag.toLowerCase())
+    );
+    const hasMobileTag = tags.some(tag => 
+      ['mobile', 'phone', 'smartphone'].includes(tag.toLowerCase())
+    );
+    
+    if (hasProfileTag) {
+      inferredType = 'profile';
+    } else if (hasDesktopTag) {
+      inferredType = 'desktop';
+    } else if (hasMobileTag) {
+      inferredType = 'mobile';
+    }
+  }
 
   // Get raw download count - if it doesn't exist, try to parse from display string or default to 0
   let downloadCountRaw = record.fields['Download Count Raw'];
@@ -120,7 +160,9 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   // Use the formatted download count from Airtable or format the raw count
   const downloadCount = record.fields['Download Count'] || formatDownloadCount(downloadCountRaw);
 
-  console.log(`Wallpaper ${record.fields.Name}: raw=${downloadCountRaw}, display=${downloadCount}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`Wallpaper ${record.fields.Name}: raw=${downloadCountRaw}, display=${downloadCount}, type=${inferredType}`);
+  }
 
   return {
     id: record.id,
@@ -128,7 +170,7 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
     tags: record.fields.Tags || [],
     downloadUrl,
     imageUrl,
-    type: typeMap[typeValue] || 'mobile',
+    type: inferredType,
     isHot: record.fields['Is Hot'] || false,
     downloadCount,
     downloadCountRaw,
@@ -136,31 +178,24 @@ function transformAirtableRecord(record: AirtableRecord): Wallpaper {
   };
 }
 
-export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): Promise<Wallpaper[]> {
-  try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+// Helper function to fetch ALL records from Airtable with pagination support
+async function fetchAllAirtableRecords(filterFormula?: string): Promise<AirtableRecord[]> {
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+  let allRecords: AirtableRecord[] = [];
+  let offset: string | undefined;
+  
+  do {
     const params = new URLSearchParams();
     
-    if (type) {
-      let filterFormula = '';
-      
-      if (type === 'mobile') {
-        filterFormula = `FIND("Mobile", ARRAYJOIN({Type}, ",")) > 0`;
-      } else if (type === 'desktop') {
-        filterFormula = `FIND("Desktop", ARRAYJOIN({Type}, ",")) > 0`;
-      } else if (type === 'profile') {
-        // Look for any profile-related values: PP, Profile, or Profile Picture
-        filterFormula = `OR(FIND("PP", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile Picture", ARRAYJOIN({Type}, ",")) > 0)`;
-      }
-      
-      if (filterFormula) {
-        params.append('filterByFormula', filterFormula);
-      }
+    if (filterFormula) {
+      params.append('filterByFormula', filterFormula);
+    }
+    
+    if (offset) {
+      params.append('offset', offset);
     }
     
     console.log('Fetching from Airtable:', `${url}?${params.toString()}`);
-    console.log('Using API Key:', AIRTABLE_API_KEY.substring(0, 10) + '...');
-    console.log('Using Base ID:', AIRTABLE_BASE_ID);
     
     const response = await fetch(`${url}?${params.toString()}`, {
       headers: {
@@ -168,9 +203,6 @@ export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): 
         'Content-Type': 'application/json'
       }
     });
-    
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -186,12 +218,96 @@ export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): 
     }
     
     const data: AirtableResponse = await response.json();
+    allRecords.push(...data.records);
+    offset = data.offset;
+    
+    console.log(`Fetched ${data.records.length} records, total so far: ${allRecords.length}${offset ? ', more available...' : ', complete'}`);
+    
+  } while (offset);
+  
+  return allRecords;
+}
+
+export async function fetchWallpapers(type?: 'mobile' | 'desktop' | 'profile'): Promise<Wallpaper[]> {
+  try {
+    let filterFormula = '';
+    
+    if (type) {
+      if (type === 'mobile') {
+        filterFormula = `FIND("Mobile", ARRAYJOIN({Type}, ",")) > 0`;
+      } else if (type === 'desktop') {
+        filterFormula = `FIND("Desktop", ARRAYJOIN({Type}, ",")) > 0`;
+      } else if (type === 'profile') {
+        // Look for any profile-related values: PP, Profile, or Profile Picture
+        filterFormula = `OR(FIND("PP", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile Picture", ARRAYJOIN({Type}, ",")) > 0)`;
+      }
+    }
+    
+    console.log('Using API Key:', AIRTABLE_API_KEY.substring(0, 10) + '...');
+    console.log('Using Base ID:', AIRTABLE_BASE_ID);
+    console.log('Filter:', filterFormula || 'none (all records)');
+    
+    // Fetch all records with pagination support
+    const allRecords = await fetchAllAirtableRecords(filterFormula);
+    
+    console.log('Response status: 200 (multiple requests if paginated)');
+    
+    const data = { records: allRecords };
     console.log('Airtable response:', data);
+    
+    // DIAGNOSTIC: Log detailed info about records for debugging
+    console.log('🔍 DIAGNOSTIC - Records Analysis:');
+    console.log(`Total records fetched from Airtable: ${data.records.length}`);
+    console.log(`Filter used: ${type || 'none (all records)'}`);
+    
+    if (data.records.length > 0) {
+      // Show first few records for debugging
+      data.records.slice(0, 3).forEach((record, index) => {
+        const hasImage = record.fields.Image && record.fields.Image.length > 0;
+        const imageUrl = hasImage ? (record.fields.Image[0].thumbnails?.full?.url || record.fields.Image[0].url) : 'NO IMAGE';
+        const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type.join(', ') : record.fields.Type;
+        
+        console.log(`Record ${index + 1}:`, {
+          id: record.id,
+          name: record.fields.Name,
+          type: typeValue,
+          hasImage,
+          imageUrl: imageUrl.substring(0, 50) + (imageUrl.length > 50 ? '...' : ''),
+          tags: record.fields.Tags || [],
+          createdTime: record.createdTime
+        });
+      });
+      
+      if (data.records.length > 3) {
+        console.log(`... and ${data.records.length - 3} more records`);
+      }
+    }
     
     const wallpapers = data.records.map(transformAirtableRecord);
     console.log('Transformed wallpapers:', wallpapers);
     
-    return wallpapers;
+    // FILTER OUT WALLPAPERS WITHOUT IMAGES
+    // Records without images shouldn't be displayed to users
+    const validWallpapers = wallpapers.filter(w => w.imageUrl && w.imageUrl.length > 0);
+    const invalidWallpapers = wallpapers.filter(w => !w.imageUrl || w.imageUrl.length === 0);
+    
+    console.log('🔍 DIAGNOSTIC - Transformation Results:');
+    console.log(`Total records from Airtable: ${wallpapers.length}`);
+    console.log(`Valid wallpapers (with images): ${validWallpapers.length}`);
+    console.log(`Invalid wallpapers (no images): ${invalidWallpapers.length}`);
+    
+    if (invalidWallpapers.length > 0) {
+      console.log('❌ Records without images (filtered out):', invalidWallpapers.map(w => ({
+        id: w.id,
+        name: w.name,
+        imageUrl: w.imageUrl,
+        type: w.type,
+        downloadCount: w.downloadCount
+      })));
+      console.warn(`⚠️ ${invalidWallpapers.length} wallpapers were excluded because they don't have images. Check Airtable to ensure all records have image attachments.`);
+    }
+    
+    return validWallpapers;
     
   } catch (error) {
     console.error('Error fetching from Airtable:', error);
@@ -409,6 +525,334 @@ class DownloadCountStore {
 
 // Export singleton instance
 export const downloadCountStore = new DownloadCountStore();
+
+// Quick function to check total wallpaper count without fetching all data
+export async function getWallpaperCount(): Promise<number> {
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+    const params = new URLSearchParams();
+    params.append('fields[]', 'Name'); // Only fetch minimal data
+    params.append('maxRecords', '1000'); // Ensure we get all records for count
+    
+    const response = await fetch(`${url}?${params.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Airtable API error: ${response.status}`);
+    }
+    
+    const data: AirtableResponse = await response.json();
+    return data.records.length;
+  } catch (error) {
+    console.error('Error getting wallpaper count:', error);
+    return 0;
+  }
+}
+
+// SPECIFIC DIAGNOSTIC: Find missing mobile wallpapers
+export async function diagnoseMissingMobileWallpapers(): Promise<void> {
+  try {
+    console.log('🔍 MOBILE DIAGNOSTIC: Analyzing mobile wallpaper discrepancy...');
+    
+    // 1. Fetch ALL wallpapers to see the full picture
+    console.log('📊 Step 1: Fetching ALL wallpapers...');
+    const allWallpapers = await fetchWallpapers();
+    
+    // 2. Fetch MOBILE wallpapers specifically using Airtable filter
+    console.log('📊 Step 2: Fetching MOBILE wallpapers with Airtable filter...');
+    const mobileFromFilter = await fetchWallpapers('mobile');
+    
+    // 3. Filter mobile wallpapers locally from all data
+    const mobileFromLocal = allWallpapers.filter(w => w.type === 'mobile');
+    
+    console.log('📊 MOBILE ANALYSIS RESULTS:');
+    console.log(`- All wallpapers total: ${allWallpapers.length}`);
+    console.log(`- Mobile via Airtable filter: ${mobileFromFilter.length}`);
+    console.log(`- Mobile via local filtering: ${mobileFromLocal.length}`);
+    
+    // 4. Find wallpapers that might be tagged as mobile but not classified as mobile type
+    const mobileTagged = allWallpapers.filter(w => 
+      w.tags.some(tag => tag.toLowerCase().includes('mobile'))
+    );
+    console.log(`- Wallpapers with 'mobile' in tags: ${mobileTagged.length}`);
+    
+    // 5. Check for wallpapers that should be mobile but aren't
+    const shouldBeMobile = allWallpapers.filter(w => {
+      const hasMobileTag = w.tags.some(tag => tag.toLowerCase().includes('mobile'));
+      const hasMobileInName = w.name.toLowerCase().includes('mobile');
+      return (hasMobileTag || hasMobileInName) && w.type !== 'mobile';
+    });
+    
+    if (shouldBeMobile.length > 0) {
+      console.log('⚠️ Wallpapers that seem mobile but are classified differently:');
+      shouldBeMobile.forEach(w => {
+        console.log(`- "${w.name}" (type: ${w.type}, tags: [${w.tags.join(', ')}])`);
+      });
+    }
+    
+    // 6. Look for records without images
+    const mobileWithoutImages = mobileFromLocal.filter(w => !w.imageUrl || w.imageUrl.length === 0);
+    if (mobileWithoutImages.length > 0) {
+      console.log('❌ Mobile wallpapers without images (won\'t display):');
+      mobileWithoutImages.forEach(w => {
+        console.log(`- "${w.name}" (id: ${w.id})`);
+      });
+    }
+    
+    // 7. Check the Airtable raw data for mobile records
+    console.log('📊 Step 3: Checking raw Airtable data for mobile records...');
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+    const params = new URLSearchParams();
+    params.append('filterByFormula', 'FIND("Mobile", ARRAYJOIN({Type}, ",")) > 0');
+    
+    const response = await fetch(`${url}?${params.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const rawData: AirtableResponse = await response.json();
+      console.log(`- Raw mobile records from Airtable: ${rawData.records.length}`);
+      
+      // Show records that might be missing images
+      const recordsWithoutImages = rawData.records.filter(r => 
+        !r.fields.Image || r.fields.Image.length === 0
+      );
+      
+      if (recordsWithoutImages.length > 0) {
+        console.log('❌ Raw records without images:');
+        recordsWithoutImages.forEach(r => {
+          console.log(`- "${r.fields.Name}" (id: ${r.id})`);
+        });
+      }
+      
+      console.log('📋 MOBILE SUMMARY:');
+      console.log(`- Expected mobile wallpapers (Airtable): ${rawData.records.length}`);
+      console.log(`- Actual mobile wallpapers (website): ${mobileFromLocal.length}`);
+      console.log(`- Missing: ${rawData.records.length - mobileFromLocal.length}`);
+      console.log(`- Records without images: ${recordsWithoutImages.length}`);
+    }
+    
+  } catch (error) {
+    console.error('❌ Mobile diagnostic failed:', error);
+  }
+}
+
+// DIAGNOSTIC FUNCTION: Check Airtable pagination and filtering issues
+export async function diagnoseAirtableFetching(): Promise<void> {
+  try {
+    console.log('🔍 AIRTABLE FETCHING DIAGNOSTIC: Analyzing fetch behavior...');
+    
+    // 1. Check total count with proper pagination
+    console.log('📊 Step 1: Checking total record count with pagination...');
+    const allRecords = await fetchAllAirtableRecords();
+    console.log(`Total records in Airtable: ${allRecords.length}`);
+    
+    // 2. Test our current filtering for PP
+    console.log('📊 Step 2: Testing PP filtering...');
+    const ppUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+    const ppParams = new URLSearchParams();
+    ppParams.append('filterByFormula', `OR(FIND("PP", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile", ARRAYJOIN({Type}, ",")) > 0, FIND("Profile Picture", ARRAYJOIN({Type}, ",")) > 0)`);
+    
+    const ppResponse = await fetch(`${ppUrl}?${ppParams.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const ppData: AirtableResponse = await ppResponse.json();
+    console.log(`PP records found by filter: ${ppData.records.length}`);
+    
+    // 3. Test our current filtering for Mobile
+    console.log('📊 Step 3: Testing Mobile filtering...');
+    const mobileUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Wallpapers`;
+    const mobileParams = new URLSearchParams();
+    mobileParams.append('filterByFormula', `FIND("Mobile", ARRAYJOIN({Type}, ",")) > 0`);
+    
+    const mobileResponse = await fetch(`${mobileUrl}?${mobileParams.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const mobileData: AirtableResponse = await mobileResponse.json();
+    console.log(`Mobile records found by filter: ${mobileData.records.length}`);
+    
+    // 4. Check what our website is actually showing
+    console.log('📊 Step 4: Checking website display...');
+    const websiteAll = await fetchWallpapers();
+    const websitePP = await fetchWallpapers('profile');
+    const websiteMobile = await fetchWallpapers('mobile');
+    
+    console.log(`Website shows - All: ${websiteAll.length}, PP: ${websitePP.length}, Mobile: ${websiteMobile.length}`);
+    
+    // 5. Analyze Type field values in all records
+    console.log('📊 Step 5: Analyzing Type field values...');
+    const typeAnalysis: Record<string, number> = {};
+    allRecords.forEach(record => {
+      const typeValue = Array.isArray(record.fields.Type) ? record.fields.Type.join(',') : record.fields.Type || 'NO_TYPE';
+      typeAnalysis[typeValue] = (typeAnalysis[typeValue] || 0) + 1;
+    });
+    
+    console.log('Type field distribution:', typeAnalysis);
+    
+    console.log('\n🔍 SUMMARY:');
+    console.log(`- Airtable total: ${allRecords.length}`);
+    console.log(`- PP filter finds: ${ppData.records.length}`);
+    console.log(`- Mobile filter finds: ${mobileData.records.length}`);
+    console.log(`- Website shows PP: ${websitePP.length}`);
+    console.log(`- Website shows Mobile: ${websiteMobile.length}`);
+    console.log(`- Potential PP missing: ${ppData.records.length - websitePP.length}`);
+    console.log(`- Potential Mobile missing: ${mobileData.records.length - websiteMobile.length}`);
+    
+  } catch (error) {
+    console.error('❌ Airtable fetching diagnostic failed:', error);
+  }
+}
+
+// DIAGNOSTIC FUNCTION: Show detailed breakdown of missing images
+export async function diagnoseMissingImages(): Promise<void> {
+  try {
+    console.log('🔍 MISSING IMAGES DIAGNOSTIC: Analyzing PP and Mobile sections...');
+    
+    // Fetch all records to get the complete picture with pagination
+    console.log('📊 Step 1: Fetching ALL wallpapers with pagination...');
+    const allRecords = await fetchAllAirtableRecords();
+    
+    console.log(`Total records in Airtable: ${allRecords.length}`);
+    
+    // Analyze PP section
+    const ppRecords = allRecords.filter(r => {
+      const type = Array.isArray(r.fields.Type) ? r.fields.Type.join(',') : r.fields.Type || '';
+      return type.includes('PP') || type.includes('Profile');
+    });
+    
+    const ppWithImages = ppRecords.filter(r => r.fields.Image && r.fields.Image.length > 0);
+    const ppWithoutImages = ppRecords.filter(r => !r.fields.Image || r.fields.Image.length === 0);
+    
+    // Analyze Mobile section
+    const mobileRecords = allRecords.filter(r => {
+      const type = Array.isArray(r.fields.Type) ? r.fields.Type.join(',') : r.fields.Type || '';
+      return type.includes('Mobile');
+    });
+    
+    const mobileWithImages = mobileRecords.filter(r => r.fields.Image && r.fields.Image.length > 0);
+    const mobileWithoutImages = mobileRecords.filter(r => !r.fields.Image || r.fields.Image.length === 0);
+    
+    console.log('\n📊 PP SECTION ANALYSIS:');
+    console.log(`- Total PP records in Airtable: ${ppRecords.length}`);
+    console.log(`- PP records WITH images: ${ppWithImages.length}`);
+    console.log(`- PP records WITHOUT images: ${ppWithoutImages.length}`);
+    console.log(`- PP records that will be shown on website: ${ppWithImages.length}`);
+    
+    console.log('\n📊 MOBILE SECTION ANALYSIS:');
+    console.log(`- Total Mobile records in Airtable: ${mobileRecords.length}`);
+    console.log(`- Mobile records WITH images: ${mobileWithImages.length}`);
+    console.log(`- Mobile records WITHOUT images: ${mobileWithoutImages.length}`);
+    console.log(`- Mobile records that will be shown on website: ${mobileWithImages.length}`);
+    
+    console.log(`\n🚨 TOTAL MISSING IMAGES: ${ppWithoutImages.length + mobileWithoutImages.length}`);
+    
+    if (ppWithoutImages.length > 0) {
+      console.log('\n❌ PP records without images:');
+      ppWithoutImages.forEach((r, i) => {
+        console.log(`${i + 1}. "${r.fields.Name}" (ID: ${r.id})`);
+      });
+    }
+    
+    if (mobileWithoutImages.length > 0) {
+      console.log('\n❌ Mobile records without images:');
+      mobileWithoutImages.forEach((r, i) => {
+        console.log(`${i + 1}. "${r.fields.Name}" (ID: ${r.id})`);
+      });
+    }
+    
+    console.log('\n💡 SOLUTION: The missing images are now filtered out automatically.');
+    console.log('   Records without image attachments in Airtable will no longer appear on the website.');
+    console.log('   To restore these wallpapers, add image attachments to the missing records in Airtable.');
+    
+  } catch (error) {
+    console.error('❌ Missing images diagnostic failed:', error);
+  }
+}
+
+// DIAGNOSTIC FUNCTION: Compare Airtable data with website display
+export async function diagnoseMissingWallpapers(): Promise<void> {
+  try {
+    console.log('🔍 DIAGNOSTIC: Starting comprehensive wallpaper analysis...');
+    
+    // 1. Fetch all wallpapers without any filters
+    console.log('📊 Step 1: Fetching ALL wallpapers from Airtable...');
+    const allWallpapers = await fetchWallpapers();
+    console.log(`Total wallpapers fetched: ${allWallpapers.length}`);
+    
+    // 2. Fetch profile wallpapers specifically  
+    console.log('📊 Step 2: Fetching PROFILE wallpapers specifically...');
+    const profileWallpapers = await fetchWallpapers('profile');
+    console.log(`Profile wallpapers fetched: ${profileWallpapers.length}`);
+    
+    // 3. Analyze type distribution
+    const typeDistribution = allWallpapers.reduce((acc, w) => {
+      acc[w.type] = (acc[w.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    console.log('📊 Type Distribution:', typeDistribution);
+    
+    // 4. Find wallpapers with PP-related tags but not classified as profile
+    const ppTaggedWallpapers = allWallpapers.filter(w => 
+      w.tags.some(tag => ['pp', 'profile', 'profile picture', 'avatar'].includes(tag.toLowerCase()))
+    );
+    
+    console.log(`📊 Wallpapers with PP-related tags: ${ppTaggedWallpapers.length}`);
+    
+    const ppTaggedButNotProfile = ppTaggedWallpapers.filter(w => w.type !== 'profile');
+    if (ppTaggedButNotProfile.length > 0) {
+      console.log('⚠️ PP-tagged wallpapers NOT classified as profile:', ppTaggedButNotProfile.map(w => ({
+        id: w.id,
+        name: w.name,
+        type: w.type,
+        tags: w.tags,
+        hasImage: !!w.imageUrl
+      })));
+    }
+    
+    // 5. Check for wallpapers without images
+    const wallpapersWithoutImages = allWallpapers.filter(w => !w.imageUrl || w.imageUrl.length === 0);
+    console.log(`📊 Wallpapers without images: ${wallpapersWithoutImages.length}`);
+    if (wallpapersWithoutImages.length > 0) {
+      console.log('❌ Wallpapers without images:', wallpapersWithoutImages.map(w => ({
+        id: w.id,
+        name: w.name,
+        type: w.type,
+        tags: w.tags
+      })));
+    }
+    
+    // 6. Summary
+    console.log('📋 DIAGNOSTIC SUMMARY:');
+    console.log(`- Total wallpapers in Airtable: ${allWallpapers.length}`);
+    console.log(`- Profile type wallpapers: ${typeDistribution.profile || 0}`);
+    console.log(`- PP-tagged wallpapers: ${ppTaggedWallpapers.length}`);
+    console.log(`- Wallpapers without images: ${wallpapersWithoutImages.length}`);
+    console.log(`- Expected PP count on website: ${(typeDistribution.profile || 0) - wallpapersWithoutImages.filter(w => w.type === 'profile').length}`);
+    
+    // 7. Cache analysis
+    const profileFromCache = allWallpapers.filter(w => w.type === 'profile');
+    console.log(`- Profile wallpapers from cached data: ${profileFromCache.length}`);
+    
+  } catch (error) {
+    console.error('❌ Diagnostic failed:', error);
+  }
+}
 
 // Product-related functions
 interface ProductAirtableRecord {

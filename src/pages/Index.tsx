@@ -7,6 +7,7 @@ import { RadioFilter } from '@/components/RadioFilter';
 import { TagFilter } from '@/components/TagFilter';
 import { WallpaperCard } from '@/components/WallpaperCard';
 import { useWallpapers } from '@/hooks/useWallpapers';
+import { diagnoseMissingWallpapers, diagnoseMissingMobileWallpapers, diagnoseMissingImages, diagnoseAirtableFetching } from '@/lib/airtable';
 
 // Team colors (darker accent versions)
 const teamColors: Record<string, string> = {
@@ -405,6 +406,26 @@ const Index = () => {
     setSortBy(value as 'newest' | 'oldest' | 'most-downloaded' | 'least-downloaded');
   };
 
+  // Make diagnostic function available globally for debugging
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).diagnoseMissingWallpapers = diagnoseMissingWallpapers;
+      (window as any).diagnoseMissingMobileWallpapers = diagnoseMissingMobileWallpapers;
+      (window as any).diagnoseMissingImages = diagnoseMissingImages;
+      (window as any).diagnoseAirtableFetching = diagnoseAirtableFetching;
+      (window as any).clearWallpaperCache = () => {
+        console.log('🗑️ Clearing wallpaper cache and refetching...');
+        refetch();
+      };
+      console.log('🔧 Debug helpers available:');
+      console.log('  - diagnoseAirtableFetching() - NEW: Check if we\'re missing records due to pagination/filtering');
+      console.log('  - diagnoseMissingImages() - Analyze missing images in PP and Mobile sections');
+      console.log('  - diagnoseMissingWallpapers() - Analyze all missing wallpapers');
+      console.log('  - diagnoseMissingMobileWallpapers() - Specific mobile wallpaper analysis');
+      console.log('  - clearWallpaperCache() - Clear cache and refetch data');
+    }
+  }, [refetch]);
+
 
 
   const containerVariants = {
@@ -448,10 +469,28 @@ const Index = () => {
       <main className="lg:ml-[270px] flex-1 px-5 pt-8 pb-24 lg:pb-8 overflow-hidden flex-col justify-start items-start gap-[52px] flex">
         <div className="w-full flex-col justify-start items-start gap-6 flex">
           {/* Header */}
-          <header className="w-full justify-start items-center gap-6 inline-flex">
+          <header className="w-full justify-between items-center gap-6 inline-flex">
             <h1 className="text-white text-[32px] font-semibold font-geist">
               Wallpapers
             </h1>
+            
+            {/* Refresh Button */}
+            <button
+              onClick={() => {
+                console.log('🔄 Manual refresh triggered');
+                refetch();
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#171717] hover:bg-[#222] border border-[#333] hover:border-[#555] rounded-lg text-white text-sm font-medium transition-all duration-200"
+              title="Refresh wallpapers to show latest uploads"
+            >
+              <Icon 
+                icon="solar:refresh-linear" 
+                width={16} 
+                height={16} 
+                className="text-white"
+              />
+              <span>Refresh</span>
+            </button>
           </header>
           
           {/* Filter Section */}
