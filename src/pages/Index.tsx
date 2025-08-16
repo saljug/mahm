@@ -74,7 +74,14 @@ const teamColors: Record<string, string> = {
   'williams': '#1A67DB', // williams blue
   'albon': '#1A67DB',
   'sainz': '#1A67DB',
-  'carlos': '#1A67DB'
+  'carlos': '#1A67DB',
+  
+  // Car Brands
+  // Audi (Darker version of BC1717)
+  'audi': '#8B1013', // darker audi red
+  
+  // Cadillac (Darker version of F9CA88)
+  'cadillac': '#D4A666' // darker cadillac gold
 };
 
 // Team logo mapping
@@ -97,7 +104,11 @@ const getTeamLogo = (tagName: string): string | null => {
     'racing bull': '/Team Logos/racing bull.svg',
     'racing bulls': '/Team Logos/racing bull.svg',
     'rb': '/Team Logos/racing bull.svg',
-    'f1': '/Team Logos/f1.svg'
+    'f1': '/Team Logos/f1.svg',
+    
+    // Car Brands
+    'audi': '/Team Logos/audi.svg',
+    'cadillac': '/Team Logos/cadillac.svg'
   };
   
   const normalizedTagName = tagName.toLowerCase().trim();
@@ -172,9 +183,11 @@ const getTagType = (tagName: string): 'team' | 'driver' | 'other' => {
   
   const teams = ['alpine', 'aston', 'aston martin', 'ferrari', 'haas', 'hass', 'kick sauber', 'sauber', 'mclaren', 'mercedes', 'racing bull', 'racing bulls', 'rb', 'redbull', 'red bull', 'red bull racing', 'williams'];
   const drivers = ['gasly', 'colapinto', 'stroll', 'alonso', 'leclerc', 'hamilton', 'ham', 'ocon', 'bearman', 'hulkenberg', 'hulk', 'bortoleto', 'norris', 'lando', 'piastri', 'oscar', 'russell', 'george', 'antonelli', 'kimi', 'lawson', 'hadjar', 'verstappen', 'max', 'tsunoda', 'albon', 'sainz', 'carlos'];
+  const carBrands = ['audi', 'cadillac'];
   
   if (teams.includes(normalizedTagName)) return 'team';
   if (drivers.includes(normalizedTagName)) return 'driver';
+  if (carBrands.includes(normalizedTagName)) return 'team'; // Treat car brands like teams for styling
   return 'other';
 };
 
@@ -231,6 +244,18 @@ const sortTagsByTeams = (tags: string[]): string[] => {
       teamNames: ['williams'], 
       drivers: ['albon', 'carlos', 'sainz'],
       primaryTeam: 'williams'
+    },
+    
+    // Car Brands (alphabetically after F1 teams)
+    { 
+      teamNames: ['audi'], 
+      drivers: [],
+      primaryTeam: 'audi'
+    },
+    { 
+      teamNames: ['cadillac'], 
+      drivers: [],
+      primaryTeam: 'cadillac'
     }
   ];
 
